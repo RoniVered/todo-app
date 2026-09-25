@@ -1,22 +1,20 @@
+# syntax=docker/dockerfile:1
+
 # Build stage — has TypeScript, devDependencies, everything needed to compile
 FROM node:24-alpine AS build
 WORKDIR /app
-COPY .docker/netspark-ca.pem /tmp/netspark-ca.pem
-ENV NODE_EXTRA_CA_CERTS=/tmp/netspark-ca.pem
 COPY package*.json ./
-RUN npm ci
+RUN --mount=type=secret,id=ca_cert,target=/tmp/ca.pem \
+    if [ -f /tmp/ca.pem ]; then export NODE_EXTRA_CA_CERTS=/tmp/ca.pem; fi; npm ci
 COPY . .
 RUN npm run build
 
 # Runtime stage — only what's needed to actually run the app
 FROM node:24-alpine
 WORKDIR /app
-COPY .docker/netspark-ca.pem /tmp/netspark-ca.pem
-ENV NODE_EXTRA_CA_CERTS=/tmp/netspark-ca.pem
 COPY package*.json ./
-RUN npm ci --omit=dev
-RUN rm -f /tmp/netspark-ca.pem
-ENV NODE_EXTRA_CA_CERTS=
+RUN --mount=type=secret,id=ca_cert,target=/tmp/ca.pem \
+    if [ -f /tmp/ca.pem ]; then export NODE_EXTRA_CA_CERTS=/tmp/ca.pem; fi; npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY public ./public
 EXPOSE 3000
